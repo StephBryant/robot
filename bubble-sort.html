@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>冒泡排序原理 · 可视化模型</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #181b22;
+    --line: #262b36;
+    --text: #e6e9ef;
+    --muted: #8b93a5;
+    --accent: #4c8dff;
+    --cmp: #ffc857;
+    --swap: #ff6b6b;
+    --done: #3ddc97;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 20px 48px;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.6 -apple-system, "Segoe UI", "Noto Sans SC", sans-serif;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 22px; }
+
+  /* 舞台 */
+  .stage {
+    position: relative;
+    height: 300px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  #bars { position: absolute; inset: 0; }
+  .bar {
+    position: absolute;
+    bottom: 0;
+    border-radius: 4px 4px 0 0;
+    background: #39404f;
+    transition: transform .28s ease, height .28s ease, background .15s ease;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 4px;
+    font-size: 11px;
+    color: rgba(255,255,255,.55);
+  }
+  .bar.done { background: rgba(61,220,151,.28); }
+  .bar.cmp  { background: var(--cmp); }
+  .bar.swp  { background: var(--swap); }
+  /* 已排好序区域的斜纹底 */
+  .stage::after {
+    content: "";
+    position: absolute; top: 0; right: 0; bottom: 0;
+    width: var(--locked, 0px);
+    background: repeating-linear-gradient(45deg,
+      rgba(61,220,151,.07) 0 8px, transparent 8px 16px);
+    border-left: 1px dashed rgba(61,220,151,.45);
+    pointer-events: none;
+    transition: width .3s ease;
+  }
+
+  /* 状态行 */
+  .status {
+    margin-top: 14px;
+    padding: 11px 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    font-size: 14px;
+    min-height: 44px;
+  }
+  .status code {
+    background: #222836; padding: 1px 6px; border-radius: 4px;
+    font-family: ui-monospace, Menlo, Consolas, monospace; color: var(--cmp);
+  }
+
+  /* 统计 */
+  .stats { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+  .stat {
+    flex: 1 1 110px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .stat .k { color: var(--muted); font-size: 12px; }
+  .stat .v { font-size: 20px; font-variant-numeric: tabular-nums; margin-top: 2px; }
+
+  /* 控制 */
+  .controls {
+    margin-top: 16px; padding: 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  }
+  button {
+    background: #262c38; color: var(--text);
+    border: 1px solid var(--line); border-radius: 7px;
+    padding: 8px 15px; font-size: 14px; cursor: pointer;
+  }
+  button:hover { background: #303848; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { filter: brightness(1.1); }
+  label.range { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+  input[type=range] { accent-color: var(--accent); }
+
+  .legend { margin-top: 14px; display: flex; gap: 18px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+  .legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+
+  .note {
+    margin-top: 20px; padding: 14px 16px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    font-size: 14px; color: var(--muted);
+  }
+  .note b { color: var(--text); font-weight: 600; }
+  .note ul { margin: 8px 0 0; padding-left: 20px; }
+  .note li { margin: 3px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>冒泡排序原理 · 可视化模型</h1>
+  <div class="sub">相邻比较 · 就地交换 · 每一轮把当前最大值"冒"到右端</div>
+
+  <div class="stage" id="stage"><div id="bars"></div></div>
+
+  <div class="status" id="status">点「播放」开始，或「单步」逐次观察每一次比较。</div>
+
+  <div class="stats">
+    <div class="stat"><div class="k">当前轮次</div><div class="v" id="s-round">0</div></div>
+    <div class="stat"><div class="k">比较次数</div><div class="v" id="s-cmp">0</div></div>
+    <div class="stat"><div class="k">交换次数</div><div class="v" id="s-swp">0</div></div>
+    <div class="stat"><div class="k">已归位元素</div><div class="v" id="s-fixed">0</div></div>
+  </div>
+
+  <div class="controls">
+    <button class="primary" id="btn-play">▶ 播放</button>
+    <button id="btn-step">单步 ▸</button>
+    <button id="btn-reset">重置</button>
+    <button id="btn-shuffle">换一组数</button>
+    <label class="range">速度
+      <input type="range" id="sp-speed" min="1" max="10" value="6">
+    </label>
+    <label class="range">个数
+      <input type="range" id="sp-size" min="5" max="30" value="12">
+    </label>
+  </div>
+
+  <div class="legend">
+    <span><i style="background:#39404f"></i>待排序</span>
+    <span><i style="background:var(--cmp)"></i>正在比较的两个元素</span>
+    <span><i style="background:var(--swap)"></i>本步发生了交换</span>
+    <span><i style="background:rgba(61,220,151,.5)"></i>已确定最终位置</span>
+  </div>
+
+  <div class="note">
+    <b>看动画时对照这三点：</b>
+    <ul>
+      <li><b>内层循环</b>从左往右扫，<code>arr[j] &gt; arr[j+1]</code> 就交换 —— 大的元素每走一步就能继续往右"冒"，所以一轮结束后本轮最大值必然停在右端。</li>
+      <li><b>外层循环</b>每完成一轮，右侧就多一个确定就位、不再参与比较的元素（绿色区 + 斜纹底）。所以第 i 轮只需比较 <code>n - i</code> 次。</li>
+      <li>优化版的"是否发生过交换"标志：某一轮零交换 → 说明剩余部分已有序，可以提前结束（试试点「换一组数」几次看是否少于 n-1 轮）。</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+const stage = document.getElementById('stage');
+const barsEl = document.getElementById('bars');
+const statusEl = document.getElementById('status');
+const $ = id => document.getElementById(id);
+
+let bars = [];          // {el, value}
+let S = null;           // 排序状态机
+let timer = null;
+
+// ---- 初始化 / 重置 -------------------------------------------------------
+function build(n) {
+  const arr = Array.from({length: n}, () => 1 + Math.floor(Math.random() * 99));
+  barsEl.innerHTML = '';
+  bars = arr.map((value, i) => {
+    const el = document.createElement('div');
+    el.className = 'bar';
+    el.textContent = value;
+    barsEl.appendChild(el);
+    return { el, value };
+  });
+  S = { arr, n, j: 0, round: 0, cmp: 0, swp: 0, fixed: 0, passSwp: 0, done: false };
+  layout();
+  paint();
+  say('点「播放」开始，或「单步」逐次观察每一次比较。');
+  stop();
+}
+
+// 依据当前数组值重画位置（用 transform 做平滑滑动）
+function layout() {
+  const w = stage.clientWidth, slot = w / S.n;
+  const max = Math.max(...S.arr);
+  bars.forEach((b, i) => {
+    b.value = S.arr[i];
+    b.el.style.width = (slot - 4) + 'px';
+    b.el.style.height = (b.value / max * 82) + '%';
+    b.el.style.transform = `translateX(${i * slot + 2}px)`;
+  });
+}
+
+function paint() {
+  bars.forEach((b, i) => {
+    b.el.className = 'bar' + (i >= S.n - S.fixed ? ' done' : '');
+    b.el.textContent = b.value;
+  });
+  $('s-round').textContent = S.done ? S.round : S.round + ' / ' + (S.n - 1);
+  $('s-cmp').textContent  = S.cmp;
+  $('s-swp').textContent  = S.swp;
+  $('s-fixed').textContent = S.fixed;
+  stage.style.setProperty('--locked', (S.fixed / S.n * 100) + '%');
+}
+
+function say(html) { statusEl.innerHTML = html; }
+const v = i => `<code>arr[${i}] = ${S.arr[i]}</code>`;
+
+// ---- 核心：推进一步（一个"动作"= 一次比较及其结果） --------------------
+function step() {
+  if (S.done) return false;
+
+  if (S.fixed === 0) S.round = 1;
+  // 未锁定区是 0 .. n-fixed-1，比较下标 j 需要 j+1 仍在未锁定区 ⇒ j ≤ n-fixed-2
+  const end = S.n - S.fixed - 2;
+
+  if (S.j > end) {                 // 本轮结束 → 右侧再锁定一个元素
+    if (S.passSwp === 0) {         // 优化：整轮零交换 ⇒ 剩余部分已有序
+      S.done = true;
+      paint();
+      say('第 ' + S.round + ' 轮<b style="color:var(--done)">一次交换都没有</b> —— 说明剩余部分已经有序，可以提前结束（无需跑满 ' +
+          (S.n - 1) + ' 轮）。共比较 <b>' + S.cmp + '</b> 次，交换 <b>' + S.swp + '</b> 次。');
+      return false;
+    }
+    S.fixed++;
+    S.passSwp = 0;
+    S.j = 0;
+    if (S.fixed >= S.n - 1) {      // 最后一个元素自然就位
+      S.fixed = S.n;
+      S.done = true;
+      paint();
+      say('排序完成 ✅ 共 <b>' + S.round + '</b> 轮，比较 <b>' + S.cmp +
+          '</b> 次，交换 <b>' + S.swp + '</b> 次。');
+      return false;
+    }
+    S.round++;
+    say('第 <b>' + (S.round - 1) + '</b> 轮结束：本轮最大值 <code>' + S.arr[S.n - S.fixed] +
+        '</code> 已冒到最右端并锁定，进入第 <b>' + S.round + '</b> 轮，内层循环下轮只需扫到下标 <code>' + (S.n - S.fixed - 2) + '</code>。');
+    paint();
+    return true;
+  }
+
+  S.cmp++;
+  const a = S.arr[S.j], b = S.arr[S.j + 1];
+  const swapped = a > b;
+
+  paint();
+  bars[S.j].el.classList.add('cmp');
+  bars[S.j + 1].el.classList.add('cmp');
+
+  if (swapped) {
+    [S.arr[S.j], S.arr[S.j + 1]] = [S.arr[S.j + 1], S.arr[S.j]];
+    S.swp++;
+    S.passSwp++;
+    // 先让高亮出现，下一帧再移动位置，交换才有"动起来"的感觉
+    requestAnimationFrame(() => {
+      bars[S.j].el.classList.remove('cmp');
+      bars[S.j].el.classList.add('swp');
+      bars[S.j + 1].el.classList.add('swp');
+      layout();
+    });
+    say('第 ' + S.round + ' 轮：比较 ' + v(S.j) + ' 与 ' + v(S.j + 1) +
+        ' → <b style="color:var(--swap)">左 &gt; 右，交换</b>，较大的 ' + a + ' 向右冒一格。');
+  } else {
+    say('第 ' + S.round + ' 轮：比较 ' + v(S.j) + ' 与 ' + v(S.j + 1) +
+        ' → 左 ≤ 右，<b>不交换</b>，指针右移。');
+  }
+  S.j++;
+  return true;
+}
+
+// ---- 播放控制 ------------------------------------------------------------
+function speed() { return [0, 700, 500, 350, 220, 130, 80, 45, 25, 12][+$('sp-speed').value]; }
+function play() {
+  if (timer || S.done) return;
+  $('btn-play').textContent = '⏸ 暂停';
+  timer = setInterval(() => { if (!step()) stop(); }, speed());
+}
+function stop() {
+  clearInterval(timer); timer = null;
+  $('btn-play').textContent = '▶ 播放';
+}
+
+$('btn-play').onclick = () => timer ? stop() : play();
+$('btn-step').onclick = () => { stop(); step(); };
+$('btn-reset').onclick = () => build(+$('sp-size').value);
+$('btn-shuffle').onclick = () => build(+$('sp-size').value);
+$('sp-size').oninput = () => build(+$('sp-size').value);
+$('sp-speed').oninput = () => { if (timer) { stop(); play(); } };
+window.addEventListener('resize', layout);
+
+build(+$('sp-size').value);
+</script>
+</body>
+</html>
